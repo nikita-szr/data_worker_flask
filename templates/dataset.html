@@ -16,7 +16,7 @@
     <canvas id="emgChart"></canvas>
 
     <h2>Изменить данные</h2>
-    <form id="uploadForm" enctype="multipart/form-data">
+    <form id="uploadForm" enctype="multipart/form-data" data-dataset-id="{{ dataset_id }}">
         <input type="file" name="file" accept=".xlsx">
         <input type="text" name="dataset_name" placeholder="Название данных">
         <button type="submit">Загрузить новые данные</button>

@@ -71,3 +71,14 @@ def get_dataset_data(dataset_id):
     conn.close()
     return df
 
+
+def calculate_peaks(df):
+    peaks = 0
+    min_angle = float('inf')
+    for angle in df['angle']:
+        if angle < min_angle:
+            min_angle = angle
+        if angle > min_angle + 20:
+            peaks += 1
+            min_angle = angle
+    return peaks

@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+import logging
 import os
 import sqlite3
-import logging
-from database import init_db, load_dataset, get_datasets, get_dataset_data, calculate_peaks
+
+from flask import Flask, jsonify, redirect, render_template, request, url_for
+
+from database import (calculate_peaks, get_dataset_data, get_datasets, init_db,
+                      load_dataset)
 
 # логгинг
 logging.basicConfig(level=logging.INFO)

@@ -1,6 +1,7 @@
-import sqlite3
-import pandas as pd
 import logging
+import sqlite3
+
+import pandas as pd
 
 # логгинг
 logging.basicConfig(level=logging.INFO)

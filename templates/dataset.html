@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Данные {{ dataset_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Данные {{ dataset_id }}</h1>
+    <h2>Статистика</h2>
+    <p><strong>Средние значения:</strong> {{ stats.mean }}</p>
+    <p><strong>Максимальные значения:</strong> {{ stats.max }}</p>
+    <p><strong>Пики (angle > 20):</strong> {{ stats.peaks }}</p>
+
+    <h2>Графический вывод</h2>
+    <canvas id="emgChart"></canvas>
+
+    <h2>Изменить данные</h2>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx">
+        <input type="text" name="dataset_name" placeholder="Название данных">
+        <button type="submit">Загрузить новые данные</button>
+    </form>
+
+    <h2>Другие данные</h2>
+    <ul>
+        {% for dataset in datasets %}
+            <li><a href="{{ url_for('dataset', dataset_id=dataset[0]) }}">{{ dataset[1] }}</a></li>
+        {% endfor %}
+    </ul>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        const ctx = document.getElementById('emgChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ plot_data.timestamp | tojson }},
+                datasets: [
+                    { label: 'EMG1', data: {{ plot_data.emg1 | tojson }}, borderColor: 'red', fill: false },
+                    { label: 'EMG2', data: {{ plot_data.emg2 | tojson }}, borderColor: 'blue', fill: false },
+                    { label: 'EMG3', data: {{ plot_data.emg3 | tojson }}, borderColor: 'green', fill: false },
+                    { label: 'EMG4', data: {{ plot_data.emg4 | tojson }}, borderColor: 'purple', fill: false },
+                    { label: 'Angle', data: {{ plot_data.angle | tojson }}, borderColor: 'black', fill: false }
+                ]
+            },
+            options: { responsive: true }
+        });
+    </script>
+</body>
+</html>

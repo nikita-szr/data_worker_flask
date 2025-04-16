@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import os
 import sqlite3
-from database import init_db, load_dataset, get_datasets, get_dataset_data
+from database import init_db, load_dataset, get_datasets, get_dataset_data, calculate_peaks
 
 
 app = Flask(__name__)

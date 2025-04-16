@@ -1,11 +1,15 @@
 import sqlite3
 import pandas as pd
 import os
+import logging
+
+# логгинг
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def init_db():
     """Подключение и создание бд"""
-
     conn = sqlite3.connect('data.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -29,30 +33,54 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+    logger.info("бд создана")
 
 
 def load_dataset(file_path, dataset_name):
     """Перенос данных из excel в таблицу бд"""
 
-    conn = sqlite3.connect('data.db')
-    cursor = conn.cursor()
+    try:
+        conn = sqlite3.connect('data.db')
+        cursor = conn.cursor()
 
-    # Сохраняем инфу о данных
-    cursor.execute('INSERT INTO datasets (name, file_path) VALUES (?, ?)', (dataset_name, file_path))
-    dataset_id = cursor.lastrowid
+        # Сохраняем инфу о данных
+        cursor.execute('INSERT INTO datasets (name, file_path) VALUES (?, ?)', (dataset_name, file_path))
+        dataset_id = cursor.lastrowid
 
-    df = pd.read_excel(file_path)
+        logger.info(f"Чтение excel файла: {file_path}")
+        df = pd.read_excel(file_path)
 
-    # Сохраняем данные в таблицу data из excel файла
-    for _, row in df.iterrows():
-        cursor.execute('''
-            INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (dataset_id, row['timestamp'], row['emg1'], row['emg2'], row['emg3'], row['emg4'], row['angle']))
+        # Проверка на столбцы как в примере
+        required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
+        if not all(col in df.columns for col in required_columns):
+            logger.error(f"Есть не все столбцы. Найдены столбцы: {df.columns}")
+            raise ValueError("Должны быть столбцы: timestamp, emg1, emg2, emg3, emg4, angle")
 
-    conn.commit()
-    conn.close()
-    return dataset_id
+        for col in required_columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        if df[required_columns].isnull().any().any():
+            logger.error("Found NaN values after conversion to numeric")
+            raise ValueError("Some values could not be converted to numbers. Please check the file.")
+
+        # Сохраняем данные в таблицу data из excel файла
+        for _, row in df.iterrows():
+            cursor.execute('''
+                INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']),
+                  int(row['emg3']), int(row['emg4']), int(row['angle'])))
+
+        conn.commit()
+        logger.info(f"Данные {dataset_name} загружены с id: {dataset_id}")
+        return dataset_id
+
+    except Exception as e:
+        logger.error(f"Ошибка: {str(e)}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_datasets():
@@ -73,6 +101,7 @@ def get_dataset_data(dataset_id):
 
 
 def calculate_peaks(df):
+    """Считает пиковые значения"""
     peaks = 0
     min_angle = float('inf')
     for angle in df['angle']:

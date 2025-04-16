@@ -1,6 +1,5 @@
 import sqlite3
 import pandas as pd
-import os
 import logging
 
 # логгинг

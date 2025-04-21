@@ -1,11 +1,10 @@
 import logging
 import os
-import sqlite3
-
+import time
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from database import (calculate_peaks, get_dataset_data, get_datasets, init_db,
-                      load_dataset)
+                      load_dataset, update_dataset_data)
 
 # логгинг
 logging.basicConfig(level=logging.INFO)
@@ -69,8 +68,11 @@ def add_dataset():
                 if not file.filename.endswith('.xlsx'):
                     logger.error("Неверный формат. Возможен только xls")
                     return "Загрузите файл xls", 400
-
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+                #  переименуем файл чтобы не сохранялся один и тот же
+                upload_time = int(time.time())
+                name, ext = os.path.splitext(file.filename)
+                new_filename = f"{name}_{upload_time}{ext}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
                 file.save(file_path)
                 dataset_id = load_dataset(file_path, dataset_name)
                 logger.info(f"Перенеправление на данные {dataset_id}")
@@ -88,37 +90,28 @@ def add_dataset():
 @app.route('/api/dataset/<int:dataset_id>', methods=['PUT'])
 def update_dataset(dataset_id):
     try:
-        if 'file' not in request.files:
-            logger.error("В API запросе  не указан файл")
-            return jsonify({'ошибка': 'не указан файл'}), 400
-
+        if 'file' not in request.files or 'dataset_name' not in request.form:
+            return jsonify({'ошибка': 'файл и название необходимы'}), 400
         file = request.files['file']
-        dataset_name = request.form.get('dataset_name', f'Dataset {dataset_id}')
-
+        dataset_name = request.form['dataset_name']
         if not file.filename.endswith('.xlsx'):
-            logger.error("Неверный формат файла")
-            return jsonify({'ошибка': 'Неверный формат файла'}), 400
+            return jsonify({'ошибка': 'загрузите excel файл'}), 400
 
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        #  переименуем файл чтобы не сохранялся один и тот же
+        upload_time = int(time.time())
+        name, ext = os.path.splitext(file.filename)
+        new_filename = f"{name}_{upload_time}{ext}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
         file.save(file_path)
-
-        # Удаляем старые данные
-        conn = sqlite3.connect('data.db')
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM data WHERE dataset_id = ?', (dataset_id,))
-        cursor.execute('UPDATE datasets SET name = ?, file_path = ? WHERE id = ?',
-                       (dataset_name, file_path, dataset_id))
-        conn.commit()
-        conn.close()
-
-        # Загружаем новые данные
-        load_dataset(file_path, dataset_name)
+        update_dataset_data(dataset_id, file_path, dataset_name)
         logger.info(f"Данные {dataset_id} обновлены")
-        return jsonify({'сообщение': 'данные обновлены', 'id': dataset_id})
-
+        return jsonify({'сообщение': 'данные успешно обновлены'}), 200
+    except ValueError as e:
+        logger.error(f"ошибка обновления данных {dataset_id}: {str(e)}")
+        return jsonify({'ошибка': str(e)}), 400
     except Exception as e:
-        logger.error(f"ошибка обновления: {str(e)}")
-        return jsonify({'ошибка': str(e)}), 500
+        logger.error(f"ошибка обновления данных {dataset_id}: {str(e)}")
+        return jsonify({'ошибка': 'ошибка на сервере'}), 500
 
 
 if __name__ == '__main__':

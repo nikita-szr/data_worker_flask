@@ -60,8 +60,8 @@ def load_dataset(file_path, dataset_name):
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
         if df[required_columns].isnull().any().any():
-            logger.error("Found NaN values after conversion to numeric")
-            raise ValueError("Some values could not be converted to numbers. Please check the file.")
+            logger.error("Найдены значения NaN после конвертации")
+            raise ValueError("Проверьте файл, некоторые значения невозомжно перевести в числа")
 
         # Сохраняем данные в таблицу data из excel файла
         for _, row in df.iterrows():
@@ -97,6 +97,13 @@ def get_dataset_data(dataset_id):
     query = 'SELECT timestamp, emg1, emg2, emg3, emg4, angle FROM data WHERE dataset_id = ?'
     df = pd.read_sql_query(query, conn, params=(dataset_id,))
     conn.close()
+    # Проверка и преобразование данных
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df = df.dropna()
+    if df.empty:
+        logger.error(f"Неверные данные {dataset_id} после очистки")
+        raise ValueError(f"Неверные данные {dataset_id}")
     return df
 
 
@@ -111,3 +118,72 @@ def calculate_peaks(df):
             peaks += 1
             min_angle = angle
     return peaks
+
+
+def update_dataset_data(dataset_id, file_path, dataset_name):
+    conn = sqlite3.connect('data.db')
+    cursor = conn.cursor()
+
+    # удаление старых данных для dataset_id
+    cursor.execute('DELETE FROM data WHERE dataset_id = ?', (dataset_id,))
+
+    # Обновление метаданных в таблице datasets
+    cursor.execute('UPDATE datasets SET name = ?, file_path = ? WHERE id = ?',
+                   (dataset_name, file_path, dataset_id))
+
+    # проверка, существует ли dataset_id
+    cursor.execute('SELECT id FROM datasets WHERE id = ?', (dataset_id,))
+    if not cursor.fetchone():
+        conn.close()
+        logger.error(f"Данные {dataset_id} не найдены в таблице")
+        raise ValueError(f"данные {dataset_id} не найдены")
+
+    # валидация еxcel-файла
+    try:
+        logger.info(f"Чтение excel файла: {file_path}")
+        df = pd.read_excel(file_path)
+        #  добавил для замены файла с данными ибо много ошибок
+        logger.info(f"столбцы в файле: {list(df.columns)}")
+        logger.info(f"Первые строки: {df.head().to_dict()}")
+
+        required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            conn.close()
+            logger.error(f"Не хватает столбцов: {missing_columns}")
+            raise ValueError(f"Не хватает столбцов: {missing_columns}")
+
+        # конвертация в цифры
+        for col in required_columns:
+            logger.info(f"перевод столбца {col} в цифры")
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            logger.info(f"столбец {col} после конвертации: {df[col].head().tolist()}")
+            # проверка на то что столбец содержит числа
+            if df[col].isna().all():
+                conn.close()
+                logger.error(f"столбец {col} не содержит чисел")
+                raise ValueError(f"столбец {col} не содержит чисел")
+
+        df = df.dropna()
+        if df.empty:
+            conn.close()
+            logger.error("Нет данных после обработки файла")
+            raise ValueError("Все строки nan")
+
+        # Вставляем данные в int
+        for _, row in df.iterrows():
+            cursor.execute('''
+                INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+            dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']), int(row['emg3']), int(row['emg4']),
+            int(row['angle'])))
+
+        conn.commit()
+        logger.info(f"Данные {dataset_id} обновлены в кол-ве {len(df)} строк")
+    except Exception as e:
+        conn.close()
+        logger.error(f"Ошибка: {str(e)}")
+        raise
+    finally:
+        conn.close()

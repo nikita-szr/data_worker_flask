@@ -1,6 +1,6 @@
 import logging
 import os
-import time
+from datetime import datetime
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 from database import (calculate_peaks, get_dataset_data, get_datasets, init_db,
@@ -69,9 +69,9 @@ def add_dataset():
                     logger.error("Неверный формат. Возможен только xls")
                     return "Загрузите файл xls", 400
                 #  переименуем файл чтобы не сохранялся один и тот же
-                upload_time = int(time.time())
+                current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 name, ext = os.path.splitext(file.filename)
-                new_filename = f"{name}_{upload_time}{ext}"
+                new_filename = f"{name}_{current_time}{ext}"
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
                 file.save(file_path)
                 dataset_id = load_dataset(file_path, dataset_name)
@@ -98,9 +98,9 @@ def update_dataset(dataset_id):
             return jsonify({'ошибка': 'загрузите excel файл'}), 400
 
         #  переименуем файл чтобы не сохранялся один и тот же
-        upload_time = int(time.time())
+        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         name, ext = os.path.splitext(file.filename)
-        new_filename = f"{name}_{upload_time}{ext}"
+        new_filename = f"{name}_{current_time}{ext}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
         file.save(file_path)
         update_dataset_data(dataset_id, file_path, dataset_name)

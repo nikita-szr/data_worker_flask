@@ -187,3 +187,60 @@ def update_dataset_data(dataset_id, file_path, dataset_name):
         raise
     finally:
         conn.close()
+
+
+# def save_dataset(file_path, dataset_name, dataset_id=None):
+#     """Загрузка или обновление данных"""
+#     conn = sqlite3.connect('data.db')
+#     cursor = conn.cursor()
+#
+#     try:
+#         if dataset_id is None:
+#             # Новые данные
+#             cursor.execute('INSERT INTO datasets (name, file_path) VALUES (?, ?)', (dataset_name, file_path))
+#             dataset_id = cursor.lastrowid
+#             logger.info(f"Созданы новые данные с id: {dataset_id}")
+#         else:
+#             # Обновление
+#             cursor.execute('SELECT id FROM datasets WHERE id = ?', (dataset_id,))
+#             if not cursor.fetchone():
+#                 raise ValueError(f"Данные с id {dataset_id} не найдены")
+#             cursor.execute('DELETE FROM data WHERE dataset_id = ?', (dataset_id,))
+#             cursor.execute('UPDATE datasets SET name = ?, file_path = ? WHERE id = ?',
+#             (dataset_name, file_path, dataset_id))
+#             logger.info(f"Обновление данных с id: {dataset_id}")
+#
+#         # Чтение и валидация файла
+#         logger.info(f"Чтение excel файла: {file_path}")
+#         df = pd.read_excel(file_path)
+#         required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
+#         if not all(col in df.columns for col in required_columns):
+#             raise ValueError(f"Не хватает столбцов: {[col for col in required_columns if col not in df.columns]}")
+#
+#         for col in required_columns:
+#             df[col] = pd.to_numeric(df[col], errors='coerce')
+#             if df[col].isna().all():
+#                 raise ValueError(f"Столбец {col} не содержит чисел")
+#
+#         df = df.dropna()
+#         if df.empty:
+#             raise ValueError("Все строки стали NaN после очистки")
+#
+#         # Вставка данных
+#         for _, row in df.iterrows():
+#             cursor.execute('''
+#                 INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
+#                 VALUES (?, ?, ?, ?, ?, ?, ?)
+#             ''', (dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']),
+#                   int(row['emg3']), int(row['emg4']), int(row['angle'])))
+#
+#         conn.commit()
+#         logger.info(f"Данные сохранены для данных {dataset_id}")
+#         return dataset_id
+#
+#     except Exception as e:
+#         conn.rollback()
+#         logger.error(f"Ошибка при сохранении: {e}")
+#         raise
+#     finally:
+#         conn.close()

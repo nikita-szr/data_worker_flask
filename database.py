@@ -10,16 +10,19 @@ logger = logging.getLogger(__name__)
 
 def init_db():
     """Подключение и создание бд"""
-    conn = sqlite3.connect('data.db')
+    conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS datasets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             file_path TEXT NOT NULL
         )
-    ''')
-    cursor.execute('''
+    """
+    )
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS data (
             dataset_id INTEGER,
             timestamp INTEGER,
@@ -30,7 +33,8 @@ def init_db():
             angle INTEGER,
             FOREIGN KEY (dataset_id) REFERENCES datasets(id)
         )
-    ''')
+    """
+    )
     conn.commit()
     conn.close()
     logger.info("бд создана")
@@ -38,38 +42,54 @@ def init_db():
 
 def load_dataset(file_path, dataset_name):
     """Перенос данных из excel в таблицу бд"""
-
     try:
-        conn = sqlite3.connect('data.db')
+        conn = sqlite3.connect("data.db")
         cursor = conn.cursor()
 
         # Сохраняем инфу о данных
-        cursor.execute('INSERT INTO datasets (name, file_path) VALUES (?, ?)', (dataset_name, file_path))
+        cursor.execute(
+            "INSERT INTO datasets (name, file_path) VALUES (?, ?)",
+            (dataset_name, file_path),
+        )
         dataset_id = cursor.lastrowid
 
         logger.info(f"Чтение excel файла: {file_path}")
         df = pd.read_excel(file_path)
 
         # Проверка на столбцы как в примере
-        required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
+        required_columns = ["timestamp", "emg1", "emg2", "emg3", "emg4", "angle"]
         if not all(col in df.columns for col in required_columns):
             logger.error(f"Есть не все столбцы. Найдены столбцы: {df.columns}")
-            raise ValueError("Должны быть столбцы: timestamp, emg1, emg2, emg3, emg4, angle")
+            raise ValueError(
+                "Должны быть столбцы: timestamp, emg1, emg2, emg3, emg4, angle"
+            )
 
         for col in required_columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
         if df[required_columns].isnull().any().any():
             logger.error("Найдены значения NaN после конвертации")
-            raise ValueError("Проверьте файл, некоторые значения невозомжно перевести в числа")
+            raise ValueError(
+                "Проверьте файл, некоторые значения невозомжно перевести в числа"
+            )
 
         # Сохраняем данные в таблицу data из excel файла
         for _, row in df.iterrows():
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']),
-                  int(row['emg3']), int(row['emg4']), int(row['angle'])))
+            """,
+                (
+                    dataset_id,
+                    int(row["timestamp"]),
+                    int(row["emg1"]),
+                    int(row["emg2"]),
+                    int(row["emg3"]),
+                    int(row["emg4"]),
+                    int(row["angle"]),
+                ),
+            )
 
         conn.commit()
         logger.info(f"Данные {dataset_name} загружены с id: {dataset_id}")
@@ -84,22 +104,38 @@ def load_dataset(file_path, dataset_name):
 
 
 def get_datasets():
-    conn = sqlite3.connect('data.db')
+    conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-    cursor.execute('SELECT id, name FROM datasets')
+    cursor.execute("SELECT id, name FROM datasets")
     datasets = cursor.fetchall()
     conn.close()
     return datasets
 
 
+def get_dataset_info(dataset_id: int):
+    """Возвращает метаданные датасета (id, name, file_path) или None."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, file_path FROM datasets WHERE id = ?", (dataset_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {"id": row[0], "name": row[1], "file_path": row[2]}
+
+
 def get_dataset_data(dataset_id):
-    conn = sqlite3.connect('data.db')
-    query = 'SELECT timestamp, emg1, emg2, emg3, emg4, angle FROM data WHERE dataset_id = ?'
+    conn = sqlite3.connect("data.db")
+    query = (
+        "SELECT timestamp, emg1, emg2, emg3, emg4, angle FROM data WHERE dataset_id = ?"
+    )
     df = pd.read_sql_query(query, conn, params=(dataset_id,))
     conn.close()
     # Проверка и преобразование данных
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna()
     if df.empty:
         logger.error(f"Неверные данные {dataset_id} после очистки")
@@ -110,8 +146,8 @@ def get_dataset_data(dataset_id):
 def calculate_peaks(df):
     """Считает пиковые значения"""
     peaks = 0
-    min_angle = float('inf')
-    for angle in df['angle']:
+    min_angle = float("inf")
+    for angle in df["angle"]:
         if angle < min_angle:
             min_angle = angle
         if angle > min_angle + 20:
@@ -121,126 +157,78 @@ def calculate_peaks(df):
 
 
 def update_dataset_data(dataset_id, file_path, dataset_name):
-    conn = sqlite3.connect('data.db')
+    """
+    Обновляет существующий датасет:
+    - проверяет что dataset_id существует
+    - удаляет старые строки из data
+    - обновляет name/file_path в datasets
+    - валидирует и загружает новые строки из excel
+    """
+    conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
 
-    # удаление старых данных для dataset_id
-    cursor.execute('DELETE FROM data WHERE dataset_id = ?', (dataset_id,))
-
-    # Обновление метаданных в таблице datasets
-    cursor.execute('UPDATE datasets SET name = ?, file_path = ? WHERE id = ?',
-                   (dataset_name, file_path, dataset_id))
-
-    # проверка, существует ли dataset_id
-    cursor.execute('SELECT id FROM datasets WHERE id = ?', (dataset_id,))
-    if not cursor.fetchone():
-        conn.close()
-        logger.error(f"Данные {dataset_id} не найдены в таблице")
-        raise ValueError(f"данные {dataset_id} не найдены")
-
-    # валидация еxcel-файла
     try:
+        # проверка, существует ли dataset_id
+        cursor.execute("SELECT id FROM datasets WHERE id = ?", (dataset_id,))
+        if not cursor.fetchone():
+            logger.error(f"Данные {dataset_id} не найдены в таблице datasets")
+            raise ValueError(f"данные {dataset_id} не найдены")
+
+        # удаление старых данных для dataset_id
+        cursor.execute("DELETE FROM data WHERE dataset_id = ?", (dataset_id,))
+
+        # обновление метаданных
+        cursor.execute(
+            "UPDATE datasets SET name = ?, file_path = ? WHERE id = ?",
+            (dataset_name, file_path, dataset_id),
+        )
+
+        # чтение и валидация excel
         logger.info(f"Чтение excel файла: {file_path}")
         df = pd.read_excel(file_path)
-        #  добавил для замены файла с данными ибо много ошибок
         logger.info(f"столбцы в файле: {list(df.columns)}")
-        logger.info(f"Первые строки: {df.head().to_dict()}")
 
-        required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
+        required_columns = ["timestamp", "emg1", "emg2", "emg3", "emg4", "angle"]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
-            conn.close()
             logger.error(f"Не хватает столбцов: {missing_columns}")
             raise ValueError(f"Не хватает столбцов: {missing_columns}")
 
-        # конвертация в цифры
+        # конвертация в числа
         for col in required_columns:
-            logger.info(f"перевод столбца {col} в цифры")
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            logger.info(f"столбец {col} после конвертации: {df[col].head().tolist()}")
-            # проверка на то что столбец содержит числа
+            df[col] = pd.to_numeric(df[col], errors="coerce")
             if df[col].isna().all():
-                conn.close()
                 logger.error(f"столбец {col} не содержит чисел")
                 raise ValueError(f"столбец {col} не содержит чисел")
 
-        df = df.dropna()
+        df = df.dropna(subset=required_columns)
         if df.empty:
-            conn.close()
             logger.error("Нет данных после обработки файла")
-            raise ValueError("Все строки nan")
+            raise ValueError("Все строки пустые/NaN после обработки файла")
 
-        # Вставляем данные в int
+        # вставка строк
+        insert_sql = (
+            "INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
         for _, row in df.iterrows():
-            cursor.execute('''
-                INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-            dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']), int(row['emg3']), int(row['emg4']),
-            int(row['angle'])))
+            cursor.execute(
+                insert_sql,
+                (
+                    dataset_id,
+                    int(row["timestamp"]),
+                    int(row["emg1"]),
+                    int(row["emg2"]),
+                    int(row["emg3"]),
+                    int(row["emg4"]),
+                    int(row["angle"]),
+                ),
+            )
 
         conn.commit()
         logger.info(f"Данные {dataset_id} обновлены в кол-ве {len(df)} строк")
-    except Exception as e:
-        conn.close()
-        logger.error(f"Ошибка: {str(e)}")
+    except Exception:
+        conn.rollback()
         raise
     finally:
         conn.close()
-
-
-# def save_dataset(file_path, dataset_name, dataset_id=None):
-#     """Загрузка или обновление данных"""
-#     conn = sqlite3.connect('data.db')
-#     cursor = conn.cursor()
-#
-#     try:
-#         if dataset_id is None:
-#             # Новые данные
-#             cursor.execute('INSERT INTO datasets (name, file_path) VALUES (?, ?)', (dataset_name, file_path))
-#             dataset_id = cursor.lastrowid
-#             logger.info(f"Созданы новые данные с id: {dataset_id}")
-#         else:
-#             # Обновление
-#             cursor.execute('SELECT id FROM datasets WHERE id = ?', (dataset_id,))
-#             if not cursor.fetchone():
-#                 raise ValueError(f"Данные с id {dataset_id} не найдены")
-#             cursor.execute('DELETE FROM data WHERE dataset_id = ?', (dataset_id,))
-#             cursor.execute('UPDATE datasets SET name = ?, file_path = ? WHERE id = ?',
-#             (dataset_name, file_path, dataset_id))
-#             logger.info(f"Обновление данных с id: {dataset_id}")
-#
-#         # Чтение и валидация файла
-#         logger.info(f"Чтение excel файла: {file_path}")
-#         df = pd.read_excel(file_path)
-#         required_columns = ['timestamp', 'emg1', 'emg2', 'emg3', 'emg4', 'angle']
-#         if not all(col in df.columns for col in required_columns):
-#             raise ValueError(f"Не хватает столбцов: {[col for col in required_columns if col not in df.columns]}")
-#
-#         for col in required_columns:
-#             df[col] = pd.to_numeric(df[col], errors='coerce')
-#             if df[col].isna().all():
-#                 raise ValueError(f"Столбец {col} не содержит чисел")
-#
-#         df = df.dropna()
-#         if df.empty:
-#             raise ValueError("Все строки стали NaN после очистки")
-#
-#         # Вставка данных
-#         for _, row in df.iterrows():
-#             cursor.execute('''
-#                 INSERT INTO data (dataset_id, timestamp, emg1, emg2, emg3, emg4, angle)
-#                 VALUES (?, ?, ?, ?, ?, ?, ?)
-#             ''', (dataset_id, int(row['timestamp']), int(row['emg1']), int(row['emg2']),
-#                   int(row['emg3']), int(row['emg4']), int(row['angle'])))
-#
-#         conn.commit()
-#         logger.info(f"Данные сохранены для данных {dataset_id}")
-#         return dataset_id
-#
-#     except Exception as e:
-#         conn.rollback()
-#         logger.error(f"Ошибка при сохранении: {e}")
-#         raise
-#     finally:
-#         conn.close()

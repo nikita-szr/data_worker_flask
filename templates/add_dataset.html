@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Добавление данных</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>Добавить новые данные</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="text" name="dataset_name" placeholder="Название данных" required>
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">Загрузить</button>
+    </form>
+    <a href="{{ url_for('index') }}">Назад к данным</a>
+</body>
+</html>

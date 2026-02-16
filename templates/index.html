@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Данные</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>Доступные данные</h1>
+    <ul>
+        {% for dataset in datasets %}
+            <li><a href="{{ url_for('dataset', dataset_id=dataset[0]) }}">{{ dataset[1] }}</a></li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('add_dataset') }}">Добавить новые данные</a>
+</body>
+</html>
